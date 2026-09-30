@@ -57,9 +57,23 @@ controls.addEventListener('lock',()=>start.classList.add('hidden'));
 controls.addEventListener('unlock',()=>start.classList.remove('hidden'));
 
 const clock = new THREE.Clock();
-const keys = {};
-addEventListener('keydown',e=>keys[e.code]=true);
-addEventListener('keyup',e=>keys[e.code]=false);
+const keys = Object.create(null);
+
+addEventListener('keydown',e=>{
+  if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
+    e.preventDefault();
+    keys[e.code]=true;
+  }
+});
+addEventListener('keyup',e=>{
+  if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
+    e.preventDefault();
+    keys[e.code]=false;
+  }
+});
+addEventListener('blur',()=>{
+  for(const k in keys) keys[k]=false;
+});
 addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
@@ -190,16 +204,35 @@ let lastSafe=new THREE.Vector3().copy(camera.position);
 
 function move(dt){
   if(!controls.isLocked)return;
+
   const speed=(keys.ShiftLeft||keys.ShiftRight)?6.4:3.7;
   const forward=Number(keys.KeyW)-Number(keys.KeyS);
   const strafe=Number(keys.KeyD)-Number(keys.KeyA);
   if(!forward&&!strafe)return;
+
   const len=Math.hypot(forward,strafe)||1;
-  const f=forward/len*speed*dt, s=strafe/len*speed*dt;
+  const amountF=forward/len*speed*dt;
+  const amountS=strafe/len*speed*dt;
+
+  // Movimiento manual para evitar problemas de compatibilidad con moveForward/moveRight.
+  const direction=new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  direction.y=0;
+  direction.normalize();
+
+  const right=new THREE.Vector3().crossVectors(direction,camera.up).normalize();
+  const delta=new THREE.Vector3()
+    .addScaledVector(direction,amountF)
+    .addScaledVector(right,amountS);
+
   const old=camera.position.clone();
-  controls.moveForward(f); controls.moveRight(s);
+  const nextX=camera.position.x+delta.x;
+  const nextZ=camera.position.z+delta.z;
+
+  if(!blocked(nextX,camera.position.z)) camera.position.x=nextX;
+  if(!blocked(camera.position.x,nextZ)) camera.position.z=nextZ;
+
   camera.position.y=1.72;
-  if(blocked(camera.position.x,camera.position.z)){camera.position.copy(old)}
   lastSafe.copy(camera.position);
 }
 
