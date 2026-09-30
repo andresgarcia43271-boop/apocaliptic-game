@@ -1,278 +1,130 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Apocalyptic Room</title>
-  <style>
-    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070806;color:#d8d6c8;font-family:system-ui,sans-serif}
-    #game{position:fixed;inset:0}
-    #hud{position:fixed;inset:0;pointer-events:none}
-    #crosshair{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2px;border-radius:50%;background:#d9ddcc;box-shadow:0 0 7px #fff}
-    #info{position:absolute;left:24px;bottom:24px;max-width:430px;padding:14px 16px;border:1px solid #596052;background:rgba(8,10,8,.72);backdrop-filter:blur(5px);font-size:13px;line-height:1.5}
-    #title{font-size:18px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px;color:#e5e0c9}
-    #hint{color:#aeb3a4}
-    #start{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(circle at center,rgba(50,55,43,.25),rgba(3,4,3,.96));pointer-events:auto;cursor:pointer}
-    #panel{width:min(520px,90vw);padding:30px;border:1px solid #5b6254;background:rgba(9,11,9,.9);box-shadow:0 20px 80px #000}
-    #panel h1{margin:0 0 8px;font-size:30px;letter-spacing:.08em;text-transform:uppercase}
-    #panel p{color:#aeb3a4;margin:7px 0}
-    #enter{display:inline-block;margin-top:18px;padding:10px 15px;border:1px solid #a7ad99;color:#eee8d2;letter-spacing:.08em}
-    #vignette{position:absolute;inset:0;background:radial-gradient(circle,transparent 38%,rgba(0,0,0,.28) 72%,rgba(0,0,0,.68));mix-blend-mode:multiply}
-    .hidden{display:none!important}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zona 04 — Apocalyptic Room</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
+#start{position:fixed;inset:0;display:grid;place-items:center;background:rgba(3,4,3,.92);cursor:pointer;z-index:5}
+#panel{width:min(520px,90vw);padding:30px;border:1px solid #5b6254;background:#0b0d0b;box-shadow:0 20px 80px #000}
+h1{margin:0 0 8px;letter-spacing:.08em}p{color:#aeb3a4}.btn{display:inline-block;margin-top:12px;padding:11px 16px;border:1px solid #a7ad99;letter-spacing:.08em}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:2}.cross{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2px;border-radius:50%;background:#eee;box-shadow:0 0 7px #fff}
+#info{position:absolute;left:20px;bottom:20px;padding:12px 15px;background:rgba(5,7,5,.7);border:1px solid #555;font-size:13px}
+.hidden{display:none!important}
+</style>
 </head>
 <body>
-<div id="game"></div>
-<div id="hud">
-  <div id="crosshair"></div>
-  <div id="vignette"></div>
-  <div id="info"><div id="title">APOCALYPTIC ROOM</div><div id="hint">WASD mover · SHIFT correr · mouse mirar · ESC liberar cursor</div></div>
-  <div id="start"><div id="panel"><h1>Zona 04</h1><p>Un cuarto abandonado después del colapso.</p><p>No hay enemigos. Solo explora y observa lo que quedó atrás.</p><div id="enter">HAZ CLIC PARA ENTRAR</div></div></div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.min.js"></script>
+<canvas id="game"></canvas>
+<div id="hud"><div class="cross"></div><div id="info">WASD mover · SHIFT correr · mouse mirar</div></div>
+<div id="start"><div id="panel"><h1>ZONA 04</h1><p>Un cuarto abandonado después del colapso.</p><p>No hay enemigos. Explora y observa lo que quedó atrás.</p><div class="btn">HAZ CLIC PARA ENTRAR</div></div></div>
 <script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x090b09);
-scene.fog = new THREE.FogExp2(0x10130f, 0.026);
+'use strict';
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),start=document.getElementById('start');
+let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,2);
+function resize(){W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 
-const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.05, 100);
-camera.position.set(0,1.72,8.2);
-
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.setSize(innerWidth,innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = .72;
-document.querySelector('#game').appendChild(renderer.domElement);
-
-// Controles FPS propios: evita incompatibilidades de PointerLockControls/CDN.
-const controls = {
-  active: false,
-  pointerLocked: false,
-  yaw: 0,
-  pitch: 0
-};
-
-const start = document.querySelector('#start');
-
-function startGame(){
-  controls.active = true;
-  start.classList.add('hidden');
-  try {
-    if(document.body.requestPointerLock) document.body.requestPointerLock();
-  } catch(e) {}
-}
-
-start.addEventListener('click', startGame);
-
-document.addEventListener('pointerlockchange',()=>{
-  controls.pointerLocked = document.pointerLockElement === document.body;
-});
-
-document.addEventListener('mousemove',e=>{
-  if(!controls.active) return;
-  const sensitivity = 0.0022;
-  controls.yaw -= e.movementX * sensitivity;
-  controls.pitch -= e.movementY * sensitivity;
-  controls.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, controls.pitch));
-  camera.rotation.set(controls.pitch, controls.yaw, 0, 'YXZ');
-});
-
-const clock = new THREE.Clock();
-const keys = Object.create(null);
-
-addEventListener('keydown',e=>{
-  if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
-    e.preventDefault();
-    keys[e.code]=true;
-  }
-});
-addEventListener('keyup',e=>{
-  if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
-    e.preventDefault();
-    keys[e.code]=false;
-  }
-});
-addEventListener('blur',()=>{
-  for(const k in keys) keys[k]=false;
-});
-addEventListener('resize',()=>{
-  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
-
-const mats = {
-  floor:new THREE.MeshStandardMaterial({color:0x353833,roughness:.95}),
-  wall:new THREE.MeshStandardMaterial({color:0x50534b,roughness:.9}),
-  darkWall:new THREE.MeshStandardMaterial({color:0x292c28,roughness:1}),
-  metal:new THREE.MeshStandardMaterial({color:0x363b36,roughness:.78,metalness:.35}),
-  rust:new THREE.MeshStandardMaterial({color:0x5a3327,roughness:1}),
-  wood:new THREE.MeshStandardMaterial({color:0x3b3329,roughness:1}),
-  cloth:new THREE.MeshStandardMaterial({color:0x30352f,roughness:1}),
-  glass:new THREE.MeshStandardMaterial({color:0x68766e,roughness:.25,transparent:true,opacity:.32}),
-  dirty:new THREE.MeshStandardMaterial({color:0x20241f,roughness:1}),
-  warning:new THREE.MeshStandardMaterial({color:0x807441,roughness:.8})
-};
-
-function box(name,x,y,z,sx,sy,sz,mat,rot=0){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat);
-  m.name=name;m.position.set(x,y,z);m.rotation.y=rot;m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
-}
-function cyl(x,y,z,r,h,mat,rot=0){
-  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12),mat);m.position.set(x,y,z);m.rotation.y=rot;m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
-}
-
-// Large room: 30 x 22 x 7
-box('floor',0,-.12,0,30,.25,22,mats.floor);
-box('ceiling',0,7,0,30,.25,22,mats.darkWall);
-box('north-wall',0,3.5,-11,30,7,.35,mats.wall);
-box('south-wall',0,3.5,11,30,7,.35,mats.wall);
-box('west-wall',-15,3.5,0,.35,7,22,mats.wall);
-box('east-wall',15,3.5,0,.35,7,22,mats.wall);
-
-// Cracks / damaged wall slabs
-for(let i=0;i<13;i++){
-  const x=-12+i*2.1;
-  box('wall damage',x,4.7,-10.78,.55,.07,0.04,mats.dirty,(i%2)*.35);
-}
-for(let i=0;i<9;i++) box('floor stain',-11+i*2.8,.015,3+(i%3)*1.1,1.2,.012,.65,mats.dirty,(i*.7)%3);
-
-// Broken windows
-function windowFrame(x,z,w=5,h=3){
-  box('window top',x,5.4,z,w,.16,.18,mats.metal);
-  box('window bottom',x,2.7,z,w,.16,.18,mats.metal);
-  box('window left',x-w/2,4.05,z,.16,2.85,.18,mats.metal);
-  box('window right',x+w/2,4.05,z,.16,2.85,.18,mats.metal);
-  box('broken glass',x,4.05,z-.04,w-.3,2.55,.035,mats.glass);
-  for(let i=0;i<4;i++) box('crack',x-w/2+i*w/3,4.1,z-.08,.025,2.1,.02,mats.dirty,.2*i);
-}
-windowFrame(-6,-10.77,6,3.2); windowFrame(5,-10.77,4.5,3.2);
-
-// Door
-box('door frame',10,3.5,10.78,4.2,7,.3,mats.darkWall);
-box('door',10,3.35,10.55,3.1,6.3,.22,mats.wood,-.06);
-box('door gap',8.45,3.4,10.48,.12,6.1,.4,mats.dirty);
-
-// Shelving + debris
-function shelf(x,z){
-  box('shelf',x,2.2,z,4.6,.18,.7,mats.metal);
-  box('shelf',x,3.5,z,4.6,.18,.7,mats.metal);
-  box('shelf',x,4.8,z,4.6,.18,.7,mats.metal);
-  box('shelf post',x-2.1,3.5,z,.16,5.2,.16,mats.metal);
-  box('shelf post',x+2.1,3.5,z,.16,5.2,.16,mats.metal);
-}
-shelf(-9,-6.8);
-for(let i=0;i<6;i++) box('box',-10.4+(i%3)*1.25,2.75+(i%2)*1.35,-6.8+(i%2)*.18,.9,.8,.75,i%3===0?mats.rust:mats.wood,(i*.3));
-
-// Workbench
-box('bench',7,1.1,-5.5,6,.35,1.7,mats.wood);
-for(const x of [4.7,9.3]) box('bench leg',x,.45,-5.5,.3,1.3,1.3,mats.metal);
-for(let i=0;i<4;i++) cyl(4.9+i*.65,1.65,-5.45,.16,.55,i%2?mats.metal:mats.rust,.2);
-
-// Furniture / overturned chair
-box('table',-1,1.35,-3.5,3.5,.3,1.8,mats.wood,.08);
-for(const x of [-2.4,.4]) for(const z of [-4.1,-2.9]) box('table leg',x,.65,z,.18,1.4,.18,mats.metal,.08);
-box('fallen chair',3.3,.65,-1.8,1.1,.18,1.1,mats.wood,.75);
-box('chair back',3.8,1.2,-1.8,.15,1.5,1.1,mats.wood,.75);
-
-// Pipes
-for(let i=0;i<3;i++){
-  const p=cyl(-12.8,5.4-i*.8,-3.2+i*.15,.11,12,mats.rust,Math.PI/2);
-  p.rotation.z=Math.PI/2;
-}
-
-// Rubble
-for(let i=0;i<32;i++){
-  const a=i*2.399, r=4+(i%7)*.55;
-  const x=Math.cos(a)*r, z=Math.sin(a)*r*.7;
-  const s=.08+(i%4)*.08;
-  box('rubble',x,s/2,z,s,s,s,mats.dirty,a);
-}
-
-// Hanging lights
-const fixtures=[];
-function light(x,z,intensity=5){
-  const bulb=new THREE.Mesh(new THREE.SphereGeometry(.12,10,8),new THREE.MeshBasicMaterial({color:0xffd9a0}));
-  bulb.position.set(x,6.55,z);scene.add(bulb);
-  const l=new THREE.PointLight(0xffd8a3,intensity,12,2);l.position.copy(bulb.position);l.castShadow=true;l.shadow.mapSize.set(512,512);scene.add(l);fixtures.push({bulb,l,base:intensity,phase:Math.random()*10});
-}
-light(-7,-2,5);light(4,1,4);light(10,-7,3);
-
-// Emergency red light
-const red=new THREE.PointLight(0x7b231d,1.4,9,2);red.position.set(-13,5.8,8);scene.add(red);
-const redBulb=new THREE.Mesh(new THREE.SphereGeometry(.14,10,8),new THREE.MeshBasicMaterial({color:0xb32920}));redBulb.position.copy(red.position);scene.add(redBulb);
-
-// Moonlight through windows
-const hemi=new THREE.HemisphereLight(0x9baa9e,0x151813,.42);scene.add(hemi);
-const moon=new THREE.DirectionalLight(0xaab8a6,1.25);moon.position.set(-8,12,-14);moon.target.position.set(0,0,0);moon.castShadow=true;moon.shadow.mapSize.set(1024,1024);scene.add(moon,moon.target);
-
-// Dust particles
-const dustGeo=new THREE.BufferGeometry(), dust=[];
-for(let i=0;i<450;i++) dust.push((Math.random()-.5)*28,Math.random()*6.5,(Math.random()-.5)*20);
-dustGeo.setAttribute('position',new THREE.Float32BufferAttribute(dust,3));
-const dustMat=new THREE.PointsMaterial({color:0xb7b9a8,size:.025,transparent:true,opacity:.32});
-scene.add(new THREE.Points(dustGeo,dustMat));
-
-// Collision boxes for simple room boundaries and furniture
-const blockers=[
-  {x:0,z:-11,w:30,d:.7},{x:0,z:11,w:30,d:.7},{x:-15,z:0,w:.7,d:22},{x:15,z:0,w:.7,d:22},
-  {x:-9,z:-6.8,w:5,d:1.1},{x:7,z:-5.5,w:6.4,d:2.1},{x:-1,z:-3.5,w:3.8,d:2.1}
+const player={x:0,z:8.2,a:0,pitch:0,active:false};
+const keys={};
+const walls=[
+{x1:-15,z1:-11,x2:15,z2:-11},{x1:15,z1:-11,x2:15,z2:11},
+{x1:15,z1:11,x2:-15,z2:11},{x1:-15,z1:11,x2:-15,z2:-11},
+{x1:8.45,z1:10.48,x2:8.45,z2:11},{x1:11.55,z1:11,x2:11.55,z2:10.48}
 ];
-function blocked(x,z){
-  const r=.42;
-  return blockers.some(b=>Math.abs(x-b.x)<b.w/2+r && Math.abs(z-b.z)<b.d/2+r);
+const objects=[
+{x:-9,z:-6.8,w:4.8,d:1.0,h:3.8,c:'#30332f',name:'estantería'},
+{x:7,z:-5.5,w:6,d:1.7,h:1.4,c:'#493a2d',name:'mesa de trabajo'},
+{x:-1,z:-3.5,w:3.5,d:1.8,h:1.5,c:'#3f3429',name:'mesa'},
+{x:3.3,z:-1.8,w:1.3,d:1.1,h:1.0,c:'#34362f',name:'silla caída'},
+{x:-11,z:3,w:1.2,d:1.0,h:.8,c:'#57372a',name:'caja'},
+{x:-9.6,z:4,w:1.0,d:1.0,h:.7,c:'#3b3329',name:'caja'},
+{x:5,z:2,w:1.0,d:1.0,h:.7,c:'#4b3a2d',name:'escombro'},
+{x:8,z:4,w:1.3,d:1.1,h:.9,c:'#3b3028',name:'escombro'}
+];
+
+function collide(x,z){
+ const r=.38;
+ if(x<-14.5||x>14.5||z<-10.5||z>10.5)return true;
+ for(const o of objects)if(Math.abs(x-o.x)<o.w/2+r&&Math.abs(z-o.z)<o.d/2+r)return true;
+ return false;
 }
-let lastSafe=new THREE.Vector3().copy(camera.position);
+function startGame(){player.active=true;start.classList.add('hidden');canvas.focus();try{canvas.requestPointerLock()}catch(e){}}
+start.addEventListener('click',startGame);
+document.addEventListener('pointerlockchange',()=>{});
+addEventListener('keydown',e=>{keys[e.code]=true;if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(!player.active&&(e.code==='Enter'||e.code==='Space'))startGame()});
+addEventListener('keyup',e=>{keys[e.code]=false});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
+addEventListener('mousemove',e=>{if(!player.active)return;player.a-=e.movementX*.0025;player.pitch=Math.max(-.5,Math.min(.5,player.pitch-e.movementY*.0018))});
 
 function move(dt){
-  if(!controls.active)return;
-
-  const speed=(keys.ShiftLeft||keys.ShiftRight)?6.4:3.7;
-  const forward=Number(keys.KeyW)-Number(keys.KeyS);
-  const strafe=Number(keys.KeyD)-Number(keys.KeyA);
-  if(!forward&&!strafe)return;
-
-  const len=Math.hypot(forward,strafe)||1;
-  const amountF=forward/len*speed*dt;
-  const amountS=strafe/len*speed*dt;
-
-  // Movimiento manual para evitar problemas de compatibilidad con moveForward/moveRight.
-  // Dirección horizontal basada únicamente en el yaw del jugador.
-  const direction=new THREE.Vector3(-Math.sin(controls.yaw),0,-Math.cos(controls.yaw));
-  const right=new THREE.Vector3(Math.cos(controls.yaw),0,-Math.sin(controls.yaw));
-  const delta=new THREE.Vector3()
-    .addScaledVector(direction,amountF)
-    .addScaledVector(right,amountS);
-
-  const old=camera.position.clone();
-  const nextX=camera.position.x+delta.x;
-  const nextZ=camera.position.z+delta.z;
-
-  if(!blocked(nextX,camera.position.z)) camera.position.x=nextX;
-  if(!blocked(camera.position.x,nextZ)) camera.position.z=nextZ;
-
-  camera.position.y=1.72;
-  lastSafe.copy(camera.position);
+ if(!player.active)return;
+ const speed=(keys.ShiftLeft||keys.ShiftRight)?6:3.5;
+ let f=Number(keys.KeyW||keys.ArrowUp)-Number(keys.KeyS||keys.ArrowDown);
+ let s=Number(keys.KeyD||keys.ArrowRight)-Number(keys.KeyA||keys.ArrowLeft);
+ const n=Math.hypot(f,s)||1;f/=n;s/=n;
+ const nx=player.x+(-Math.sin(player.a)*f+Math.cos(player.a)*s)*speed*dt;
+ const nz=player.z+(-Math.cos(player.a)*f-Math.sin(player.a)*s)*speed*dt;
+ if(!collide(nx,player.z))player.x=nx;if(!collide(player.x,nz))player.z=nz;
 }
-
-let t=0;
-function animate(){
-  requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),.05); t+=dt;
-  move(dt);
-  fixtures.forEach((o,i)=>{
-    const flick=Math.sin(t*(7+i*.7)+o.phase)>.93 ? .2 : 1;
-    o.l.intensity=o.base*flick*(.92+.08*Math.sin(t*2+i));
-    o.bulb.material.opacity=0.75+0.25*flick;
-  });
-  red.intensity=1.1+.45*(Math.sin(t*5)+1)/2;
-  redBulb.material.color.setHex(Math.sin(t*5)>0.2?0xd33025:0x5d1714);
-  renderer.render(scene,camera);
+function rayAngle(a){while(a<-Math.PI)a+=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;return a}
+function wallDist(ang){
+ let best=100;
+ const rx=Math.sin(ang),rz=Math.cos(ang);
+ for(const w of walls){
+  const dx=w.x2-w.x1,dz=w.z2-w.z1;
+  const den=rx*dz-rz*dx;if(Math.abs(den)<1e-6)continue;
+  const t=((w.x1-player.x)*dz-(w.z1-player.z)*dx)/den;
+  const u=((w.x1-player.x)*rz-(w.z1-player.z)*rx)/den;
+  if(t>0&&u>=0&&u<=1)best=Math.min(best,t);
+ }
+ return best;
 }
-animate();
+function render(){
+ ctx.clearRect(0,0,W,H);
+ const horizon=H/2+player.pitch*H*.45;
+ ctx.fillStyle='#171b15';ctx.fillRect(0,0,W,horizon);
+ ctx.fillStyle='#292b26';ctx.fillRect(0,horizon,W,H-horizon);
+ // ceiling/floor bands
+ const fov=Math.PI/3;
+ const rays=Math.max(160,Math.floor(W/3));
+ const colW=W/rays;
+ for(let i=0;i<rays;i++){
+  const cam=(i/(rays-1)-.5)*fov,ang=player.a+cam;
+  let d=wallDist(ang)*Math.cos(cam);
+  const oh=objectsHit(ang,cam);
+  if(oh<d)d=oh;
+  const wallH=Math.min(H*2.2,430/d);
+  const y=horizon-wallH/2;
+  const shade=Math.max(18,105-d*4);
+  ctx.fillStyle='rgb('+shade+','+(shade+3)+','+(shade-2)+')';
+  ctx.fillRect(i*colW,y,colW+1,wallH);
+ }
+ drawObjects(horizon,fov);
+ // windows glow
+ ctx.globalAlpha=.18;ctx.fillStyle='#aab9a5';ctx.fillRect(W*.29, H*.18, W*.16,H*.2);ctx.fillRect(W*.56,H*.18,W*.12,H*.2);ctx.globalAlpha=1;
+ // vignette
+ const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.62)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+function objectsHit(ang,cam){
+ let best=100;
+ const rx=Math.sin(ang),rz=Math.cos(ang);
+ for(const o of objects){
+  const dx=o.x-player.x,dz=o.z-player.z,dist=Math.hypot(dx,dz),rel=rayAngle(Math.atan2(dx,dz)-ang);
+  if(Math.abs(rel)<Math.atan2(Math.max(o.w,o.d)/2,dist))best=Math.min(best,dist*Math.cos(cam));
+ }
+ return best;
+}
+function drawObjects(horizon,fov){
+ const list=objects.map(o=>{const dx=o.x-player.x,dz=o.z-player.z,d=Math.hypot(dx,dz),a=rayAngle(Math.atan2(dx,dz)-player.a);return{...o,d,a}}).filter(o=>Math.abs(o.a)<fov*.62&&o.d>.3).sort((a,b)=>b.d-a.d);
+ for(const o of list){
+  const sx=W/2+(o.a/fov)*W, hh=Math.min(H*1.3,360/o.d), ww=Math.max(8,hh*(o.w/o.h)*.7), yy=horizon-hh*.55;
+  ctx.fillStyle=o.c;ctx.fillRect(sx-ww/2,yy,ww,hh);
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(sx-ww/2,yy,ww,Math.max(3,hh*.07));
+ }
+}
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;move(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
 </script>
 </body>
 </html>
