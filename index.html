@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v9</title>
+<title>Zona 04 — Apocalyptic Room v11</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -69,14 +69,14 @@ function move(dt){
 }
 function rayAngle(a){while(a<-Math.PI)a+=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;return a}
 function wallDist(ang){
- const dx=Math.sin(ang), dz=Math.cos(ang);
+ const dx=Math.sin(ang), dz=-Math.cos(ang);
  let best=1000;
  if(Math.abs(dx)>1e-6){const tx=dx>0?(15-player.x)/dx:(-15-player.x)/dx;if(tx>0)best=Math.min(best,tx)}
  if(Math.abs(dz)>1e-6){const tz=dz>0?(11-player.z)/dz:(-11-player.z)/dz;if(tz>0)best=Math.min(best,tz)}
  return best;
 }
 function rayBox(o,ang){
- const dx=Math.sin(ang),dz=Math.cos(ang);
+ const dx=Math.sin(ang),dz=-Math.cos(ang);
  const minX=o.x-o.w/2,maxX=o.x+o.w/2,minZ=o.z-o.d/2,maxZ=o.z+o.d/2;
  let tx1=-Infinity,tx2=Infinity,tz1=-Infinity,tz2=Infinity;
  if(Math.abs(dx)<1e-8){if(player.x<minX||player.x>maxX)return 1000}else{tx1=(minX-player.x)/dx;tx2=(maxX-player.x)/dx}
