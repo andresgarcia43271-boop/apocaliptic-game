@@ -69,16 +69,22 @@ function move(dt){
 }
 function rayAngle(a){while(a<-Math.PI)a+=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;return a}
 function wallDist(ang){
- let best=100;
- const rx=Math.sin(ang),rz=Math.cos(ang);
- for(const w of walls){
-  const dx=w.x2-w.x1,dz=w.z2-w.z1;
-  const den=rx*dz-rz*dx;if(Math.abs(den)<1e-6)continue;
-  const t=((w.x1-player.x)*dz-(w.z1-player.z)*dx)/den;
-  const u=((w.x1-player.x)*rz-(w.z1-player.z)*rx)/den;
-  if(t>0&&u>=0&&u<=1)best=Math.min(best,t);
- }
+ const dx=Math.sin(ang), dz=Math.cos(ang);
+ let best=1000;
+ if(Math.abs(dx)>1e-6){const tx=dx>0?(15-player.x)/dx:(-15-player.x)/dx;if(tx>0)best=Math.min(best,tx)}
+ if(Math.abs(dz)>1e-6){const tz=dz>0?(11-player.z)/dz:(-11-player.z)/dz;if(tz>0)best=Math.min(best,tz)}
  return best;
+}
+function rayBox(o,ang){
+ const dx=Math.sin(ang),dz=Math.cos(ang);
+ const minX=o.x-o.w/2,maxX=o.x+o.w/2,minZ=o.z-o.d/2,maxZ=o.z+o.d/2;
+ let tx1=-Infinity,tx2=Infinity,tz1=-Infinity,tz2=Infinity;
+ if(Math.abs(dx)<1e-8){if(player.x<minX||player.x>maxX)return 1000}else{tx1=(minX-player.x)/dx;tx2=(maxX-player.x)/dx}
+ if(Math.abs(dz)<1e-8){if(player.z<minZ||player.z>maxZ)return 1000}else{tz1=(minZ-player.z)/dz;tz2=(maxZ-player.z)/dz}
+ const near=Math.max(Math.min(tx1,tx2),Math.min(tz1,tz2));
+ const far=Math.min(Math.max(tx1,tx2),Math.max(tz1,tz2));
+ if(far<0||near>far)return 1000;
+ return near>0?near:far;
 }
 function render(){
  ctx.clearRect(0,0,W,H);
