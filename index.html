@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v19</title>
+<title>Zona 04 — Apocalyptic Room v20</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -86,26 +86,46 @@ function rayBox(o,ang){
  if(far<0||near>far)return 1000;
  return near>0?near:far;
 }
-function project(x,z,y=0){
+function cameraPoint(x,z,y=0){
  const dx=x-player.x,dz=z-player.z;
  const ca=Math.cos(player.a),sa=Math.sin(player.a);
- // World -> camera: right=(cos a,-sin a), forward=(-sin a,-cos a)
- const sx=dx*ca-dz*sa;
- const depth=-dx*sa-dz*ca;
+ return {sx:dx*ca-dz*sa,depth:-dx*sa-dz*ca,y};
+}
+function projectCamera(p){
  const focal=(H/2)/Math.tan(Math.PI/6);
  const horizon=H/2+player.pitch*H*.4;
- return {x:W/2+(sx/Math.max(depth,.08))*focal,y:horizon-(y/Math.max(depth,.08))*focal,z:depth};
+ return {x:W/2+(p.sx/p.depth)*focal,y:horizon-(p.y/p.depth)*focal};
 }
 function quad(points,fill,stroke){
- const p=points.map(v=>project(v[0],v[1],v[2]));
- // Only reject a polygon when its entire geometry is behind the camera.
- if(p.every(v=>v.z<=.08))return;
- const q=p.filter(v=>v.z>.08);
- if(q.length<3)return;
- // For this room all relevant polygons are planar; draw their projected vertices.
- ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);
- for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);
- ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+ // Clip the 3D polygon against the camera plane BEFORE perspective division.
+ // v19/v18 used Math.max(depth,.08), which projected points behind the camera
+ // onto the near plane and produced enormous/self-intersecting wall polygons.
+ let poly=points.map(v=>cameraPoint(v[0],v[1],v[2]));
+ const near=.12;
+ const clipped=[];
+ for(let i=0;i<poly.length;i++){
+   const A=poly[i],B=poly[(i+1)%poly.length];
+   const Ain=A.depth>near,Bin=B.depth>near;
+   if(Ain)clipped.push(A);
+   if(Ain!==Bin){
+     const t=(near-A.depth)/(B.depth-A.depth);
+     clipped.push({
+       sx:A.sx+(B.sx-A.sx)*t,
+       depth:near,
+       y:A.y+(B.y-A.y)*t
+     });
+   }
+ }
+ if(clipped.length<3)return;
+ ctx.beginPath();
+ const p0=projectCamera(clipped[0]);
+ ctx.moveTo(p0.x,p0.y);
+ for(let i=1;i<clipped.length;i++){
+   const p=projectCamera(clipped[i]);
+   ctx.lineTo(p.x,p.y);
+ }
+ ctx.closePath();
+ ctx.fillStyle=fill;ctx.fill();
  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
 }
 function render(){
