@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v11</title>
+<title>Zona 04 — Apocalyptic Room v12</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -89,44 +89,75 @@ function rayBox(o,ang){
 function render(){
  ctx.clearRect(0,0,W,H);
  const horizon=H/2+player.pitch*H*.45;
- ctx.fillStyle='#171b15';ctx.fillRect(0,0,W,horizon);
- ctx.fillStyle='#292b26';ctx.fillRect(0,horizon,W,H-horizon);
- // ceiling/floor bands
  const fov=Math.PI/3;
- const rays=Math.max(240,Math.floor(W/2));
+ const proj=(H/2)/Math.tan(fov/2);
+ // Clear, readable ceiling and floor.
+ ctx.fillStyle='#10130f';ctx.fillRect(0,0,W,horizon);
+ ctx.fillStyle='#30322d';ctx.fillRect(0,horizon,W,H-horizon);
+
+ const rays=Math.max(320,Math.floor(W*.8));
  const colW=W/rays;
  for(let i=0;i<rays;i++){
-  const cam=(i/(rays-1)-.5)*fov,ang=player.a+cam;
-  let d=wallDist(ang)*Math.cos(cam);
-  const oh=objectsHit(ang,cam);
-  if(oh<d)d=oh;
-  const wallH=Math.min(H*2.2,520/d);
-  const y=horizon-wallH/2;
-  const shade=Math.max(18,105-d*4);
-  ctx.fillStyle='rgb('+shade+','+(shade+3)+','+(Math.max(0,shade-2))+')';
-  ctx.fillRect(i*colW,y,colW+1,wallH);
+  const cam=(i/(rays-1)-.5)*fov;
+  const ang=player.a+cam;
+  const wallRaw=wallDist(ang);
+  const objectRaw=objectsHit(ang);
+  const raw=Math.min(wallRaw,objectRaw);
+  const d=Math.max(.12,raw*Math.cos(cam));
+  const wallH=Math.min(H*3,7*proj/d);
+  const top=horizon-wallH*.5;
+
+  // Make the walls clearly visible instead of tiny grey strips.
+  const light=Math.max(28,Math.min(125,118-d*2.8));
+  ctx.fillStyle='rgb('+light+','+(light+3)+','+(light-5)+')';
+  ctx.fillRect(i*colW,top,colW+1,wallH);
+
+  // Floor perspective lines give immediate depth and orientation.
+  if(i%12===0){
+   ctx.strokeStyle='rgba(150,155,145,.12)';
+   ctx.beginPath();ctx.moveTo(i*colW,horizon);ctx.lineTo(W/2+(i*colW-W/2)*2.5,H);ctx.stroke();
+  }
  }
- drawObjects(horizon,fov);
- // windows glow
- ctx.globalAlpha=.18;ctx.fillStyle='#aab9a5';ctx.fillRect(W*.29, H*.18, W*.16,H*.2);ctx.fillRect(W*.56,H*.18,W*.12,H*.2);ctx.globalAlpha=1;
- // vignette
- const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.62)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ drawObjects(horizon,fov,proj);
+ // Windows / openings
+ ctx.globalAlpha=.22;ctx.fillStyle='#9aa995';
+ ctx.fillRect(W*.27,H*.16,W*.17,H*.20);
+ ctx.fillRect(W*.56,H*.16,W*.13,H*.20);
+ ctx.globalAlpha=1;
+
+ const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.18,W/2,H/2,Math.max(W,H)*.75);
+ g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.48)');
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
 }
-function objectsHit(ang,cam){
- let best=100;
- const rx=Math.sin(ang),rz=Math.cos(ang);
+function objectsHit(ang){
+ let best=1000;
  for(const o of objects){
-  const dx=o.x-player.x,dz=o.z-player.z,dist=Math.hypot(dx,dz),rel=rayAngle(Math.atan2(dx,dz)-ang);
-  if(Math.abs(rel)<Math.atan2(Math.max(o.w,o.d)/2,dist))best=Math.min(best,dist*Math.cos(cam));
+  const d=rayBox(o,ang);
+  if(d<best)best=d;
  }
  return best;
 }
-function drawObjects(horizon,fov){
- const list=objects.map(o=>{const dx=o.x-player.x,dz=o.z-player.z,d=Math.hypot(dx,dz),a=rayAngle(Math.atan2(dx,dz)-player.a);return{...o,d,a}}).filter(o=>Math.abs(o.a)<fov*.62&&o.d>.3).sort((a,b)=>b.d-a.d);
+function drawObjects(horizon,fov,proj){
+ const list=objects.map(o=>{
+  const dx=o.x-player.x,dz=o.z-player.z;
+  const d=Math.hypot(dx,dz);
+  const a=rayAngle(Math.atan2(dx,dz)-player.a);
+  return{...o,d,a};
+ }).filter(o=>Math.abs(o.a)<fov*.65&&o.d>.3).sort((a,b)=>b.d-a.d);
+
  for(const o of list){
-  const sx=W/2+(o.a/fov)*W, hh=Math.min(H*1.3,360/o.d), ww=Math.max(8,hh*(o.w/o.h)*.7), yy=horizon-hh*.55;
-  ctx.fillStyle=o.c;ctx.fillRect(sx-ww/2,yy,ww,hh);ctx.strokeStyle='rgba(0,0,0,.55)';ctx.strokeRect(sx-ww/2,yy,ww,hh);
-  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(sx-ww/2,yy,ww,Math.max(3,hh*.07));
+  const depth=Math.max(.2,o.d*Math.cos(o.a));
+  const hh=Math.min(H*2.2,o.h*proj/depth);
+  const ww=Math.max(10,Math.min(W*.55,o.w*proj/depth));
+  const sx=W/2+(o.a/fov)*W;
+  const yy=horizon-hh*.72;
+  ctx.fillStyle=o.c;
+  ctx.fillRect(sx-ww/2,yy,ww,hh);
+  ctx.strokeStyle='rgba(0,0,0,.8)';
+  ctx.lineWidth=2;
+  ctx.strokeRect(sx-ww/2,yy,ww,hh);
+  ctx.fillStyle='rgba(0,0,0,.28)';
+  ctx.fillRect(sx-ww/2,yy,ww,Math.max(4,hh*.08));
  }
 }
 let last=performance.now();
