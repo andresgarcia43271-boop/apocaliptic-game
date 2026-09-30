@@ -61,12 +61,19 @@ const controls = {
 const start = document.querySelector('#start');
 
 start.addEventListener('click',()=>{
-  document.body.requestPointerLock();
+  // Activar inmediatamente sin depender de que Pointer Lock sea aceptado.
+  controls.isLocked = true;
+  start.classList.add('hidden');
+
+  if(document.body.requestPointerLock){
+    try { document.body.requestPointerLock(); } catch(e) {}
+  }
 });
 
 document.addEventListener('pointerlockchange',()=>{
   controls.isLocked = document.pointerLockElement === document.body;
-  start.classList.toggle('hidden', controls.isLocked);
+  // Si el navegador rechaza Pointer Lock, el juego sigue funcionando con el cursor normal.
+  if(controls.isLocked) start.classList.add('hidden');
 });
 
 document.addEventListener('mousemove',e=>{
