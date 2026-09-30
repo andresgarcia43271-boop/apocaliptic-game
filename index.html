@@ -50,34 +50,30 @@ document.querySelector('#game').appendChild(renderer.domElement);
 
 // Controles FPS propios: evita incompatibilidades de PointerLockControls/CDN.
 const controls = {
-  isLocked: false,
+  active: false,
+  pointerLocked: false,
   yaw: 0,
-  pitch: 0,
-  lock(){
-    document.body.requestPointerLock();
-  }
+  pitch: 0
 };
 
 const start = document.querySelector('#start');
 
-start.addEventListener('click',()=>{
-  // Activar inmediatamente sin depender de que Pointer Lock sea aceptado.
-  controls.isLocked = true;
+function startGame(){
+  controls.active = true;
   start.classList.add('hidden');
+  try {
+    if(document.body.requestPointerLock) document.body.requestPointerLock();
+  } catch(e) {}
+}
 
-  if(document.body.requestPointerLock){
-    try { document.body.requestPointerLock(); } catch(e) {}
-  }
-});
+start.addEventListener('click', startGame);
 
 document.addEventListener('pointerlockchange',()=>{
-  controls.isLocked = document.pointerLockElement === document.body;
-  // Si el navegador rechaza Pointer Lock, el juego sigue funcionando con el cursor normal.
-  if(controls.isLocked) start.classList.add('hidden');
+  controls.pointerLocked = document.pointerLockElement === document.body;
 });
 
 document.addEventListener('mousemove',e=>{
-  if(!controls.isLocked) return;
+  if(!controls.active) return;
   const sensitivity = 0.0022;
   controls.yaw -= e.movementX * sensitivity;
   controls.pitch -= e.movementY * sensitivity;
@@ -232,7 +228,7 @@ function blocked(x,z){
 let lastSafe=new THREE.Vector3().copy(camera.position);
 
 function move(dt){
-  if(!controls.isLocked)return;
+  if(!controls.active)return;
 
   const speed=(keys.ShiftLeft||keys.ShiftRight)?6.4:3.7;
   const forward=Number(keys.KeyW)-Number(keys.KeyS);
