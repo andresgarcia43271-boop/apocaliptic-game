@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v18</title>
+<title>Zona 04 — Apocalyptic Room v19</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -89,17 +89,20 @@ function rayBox(o,ang){
 function project(x,z,y=0){
  const dx=x-player.x,dz=z-player.z;
  const ca=Math.cos(player.a),sa=Math.sin(player.a);
- // Camera basis: forward is the direction the player walks with W.
+ // World -> camera: right=(cos a,-sin a), forward=(-sin a,-cos a)
  const sx=dx*ca-dz*sa;
  const depth=-dx*sa-dz*ca;
- if(depth<=.08)return null;
- const fov=Math.PI/3;
- const focal=(H/2)/Math.tan(fov/2);
- return {x:W/2+(sx/depth)*focal,y:H/2+player.pitch*H*.4-(y/depth)*focal,z:depth};
+ const focal=(H/2)/Math.tan(Math.PI/6);
+ const horizon=H/2+player.pitch*H*.4;
+ return {x:W/2+(sx/Math.max(depth,.08))*focal,y:horizon-(y/Math.max(depth,.08))*focal,z:depth};
 }
 function quad(points,fill,stroke){
  const p=points.map(v=>project(v[0],v[1],v[2]));
- if(p.some(v=>!v))return;
+ // Only reject a polygon when its entire geometry is behind the camera.
+ if(p.every(v=>v.z<=.08))return;
+ const q=p.filter(v=>v.z>.08);
+ if(q.length<3)return;
+ // For this room all relevant polygons are planar; draw their projected vertices.
  ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);
  for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);
  ctx.closePath();ctx.fillStyle=fill;ctx.fill();
@@ -142,47 +145,35 @@ function render(){
  quad([[-7.5,-11.03,2.0],[-3.0,-11.03,2.0],[-3.0,-11.03,5.2],[-7.5,-11.03,5.2]],'#687866','#b3bea9');
  quad([[1.5,-11.03,2.0],[5.5,-11.03,2.0],[5.5,-11.03,5.2],[1.5,-11.03,5.2]],'#687866','#b3bea9');
 
- // Objects: render every visible face as a true 3D box.
+ // Objects: explicit 3D boxes. The previous version could discard faces when one corner crossed the camera plane.
  const visible=objects.map(o=>({...o,dist:Math.hypot(o.x-player.x,o.z-player.z)}))
    .filter(o=>o.dist<32).sort((a,b)=>b.dist-a.dist);
  for(const o of visible){
    const x1=o.x-o.w/2,x2=o.x+o.w/2,z1=o.z-o.d/2,z2=o.z+o.d/2;
-   const faces=[
-     {p:[[x1,z1,0],[x2,z1,0],[x2,z1,o.h],[x1,z1,o.h]],c:o.c},
-     {p:[[x2,z1,0],[x2,z2,0],[x2,z2,o.h],[x2,z1,o.h]],c:'#625747'},
-     {p:[[x1,z2,0],[x2,z2,0],[x2,z2,o.h],[x1,z2,o.h]],c:'#3b3127'},
-     {p:[[x1,z1,o.h],[x2,z1,o.h],[x2,z2,o.h],[x1,z2,o.h]],c:'#81725d'}
+   const P=[
+     [x1,z1,0],[x2,z1,0],[x2,z2,0],[x1,z2,0],
+     [x1,z1,o.h],[x2,z1,o.h],[x2,z2,o.h],[x1,z2,o.h]
    ];
-   faces.sort((a,b)=>{
-     const da=a.p.reduce((s,v)=>s+Math.hypot(v[0]-player.x,v[1]-player.z),0);
-     const db=b.p.reduce((s,v)=>s+Math.hypot(v[0]-player.x,v[1]-player.z),0);
-     return db-da;
-   });
-   for(const face of faces) quad(face.p,face.c,'#171813');
-   const top=project(o.x,o.z,o.h+.12);
-   if(top && top.x>-W*.2 && top.x<W*1.2){
-     const label=12;
-     ctx.fillStyle='#d2c69e';ctx.font='bold '+label+'px system-ui';ctx.textAlign='center';
-     ctx.fillText(o.name.toUpperCase(),top.x,top.y-5);
+   const faces=[
+     [0,1,5,4,o.c],[1,2,6,5,'#665a49'],
+     [2,3,7,6,'#40362c'],[4,5,6,7,'#88785f']
+   ];
+   for(const face of faces) quad(face.slice(0,4).map(i=>P[i]),face[4],'#11120f');
+   const center=project(o.x,o.z,o.h);
+   if(center && center.z>.08){
+     ctx.fillStyle='#ddd0a5';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+     ctx.fillText(o.name.toUpperCase(),center.x,center.y-8);
    }
  }
  
- // Guaranteed visible reference crate directly in front of the player.
- const testPts=[
-   project(-1.5,3.0,0),project(1.5,3.0,0),
-   project(1.5,3.0,2.2),project(-1.5,3.0,2.2)
- ];
- if(testPts.every(Boolean)){
-   ctx.beginPath();ctx.moveTo(testPts[0].x,testPts[0].y);
-   for(let i=1;i<testPts.length;i++)ctx.lineTo(testPts[i].x,testPts[i].y);
-   ctx.closePath();ctx.fillStyle='#80603c';ctx.fill();
-   ctx.strokeStyle='#e0c18b';ctx.lineWidth=4;ctx.stroke();
-   ctx.fillStyle='#f0d79d';ctx.font='bold 15px system-ui';ctx.textAlign='center';
-   ctx.fillText('OBJETO TEST',project(0,3,2.2).x,project(0,3,2.2).y-10);
- } else {
-   // If the crate is partly behind the camera, show a small diagnostic marker.
-   ctx.fillStyle='#e0c18b';ctx.font='bold 13px system-ui';ctx.textAlign='left';
-   ctx.fillText('GIRA CON FLECHAS ← →',18,58);
+ // A deliberately simple reference object, independent of the room walls.
+ const tcx=project(0,3,0), ttop=project(0,3,2.5);
+ if(tcx.z>.08 && ttop.z>.08){
+   const left=project(-1.5,3,0),right=project(1.5,3,0);
+   const ltop=project(-1.5,3,2.5),rtop=project(1.5,3,2.5);
+   ctx.beginPath();ctx.moveTo(left.x,left.y);ctx.lineTo(right.x,right.y);ctx.lineTo(rtop.x,rtop.y);ctx.lineTo(ltop.x,ltop.y);ctx.closePath();
+   ctx.fillStyle='#80603c';ctx.fill();ctx.strokeStyle='#f0cf8a';ctx.lineWidth=4;ctx.stroke();
+   ctx.fillStyle='#f0cf8a';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('OBJETO TEST',ttop.x,ttop.y-12);
  }
  
  // Ceiling beams
