@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v13</title>
+<title>Zona 04 — Apocalyptic Room v14</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -166,7 +166,7 @@ function drawObjects(horizon,fov,proj){
  const list=objects.map(o=>{
   const dx=o.x-player.x,dz=o.z-player.z;
   const d=Math.hypot(dx,dz);
-  const a=rayAngle(Math.atan2(dx,dz)-player.a);
+  const a=rayAngle(Math.atan2(dx,-dz)-player.a);
   return{...o,d,a};
  }).filter(o=>Math.abs(o.a)<fov*.65&&o.d>.3).sort((a,b)=>b.d-a.d);
 
