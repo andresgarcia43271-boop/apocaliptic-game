@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v15</title>
+<title>Zona 04 — Apocalyptic Room v16</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
@@ -86,93 +86,85 @@ function rayBox(o,ang){
  if(far<0||near>far)return 1000;
  return near>0?near:far;
 }
+function project(x,z,y=0){
+ const dx=x-player.x,dz=z-player.z;
+ const ca=Math.cos(player.a),sa=Math.sin(player.a);
+ const cx=dx*ca+dz*sa;
+ const cz=dx*sa-dz*ca;
+ if(cz<=.15)return null;
+ const fov=Math.PI/3;
+ const focal=(H/2)/Math.tan(fov/2);
+ return {x:W/2+(cx/cz)*focal,y:H/2+player.pitch*H*.4-(y/cz)*focal,z:cz};
+}
+function quad(points,fill,stroke){
+ const p=points.map(v=>project(v[0],v[1],v[2]));
+ if(p.some(v=>!v))return;
+ ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);
+ for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);
+ ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+ if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
+}
 function render(){
  ctx.clearRect(0,0,W,H);
  const horizon=H/2+player.pitch*H*.4;
- const fov=Math.PI/3;
- const proj=(H/2)/Math.tan(fov/2);
- 
- // Strong ceiling and floor
- ctx.fillStyle='#080a08';ctx.fillRect(0,0,W,horizon);
+
+ // Ceiling and floor background
+ ctx.fillStyle='#0b0d0b';ctx.fillRect(0,0,W,horizon);
  const floor=ctx.createLinearGradient(0,horizon,0,H);
- floor.addColorStop(0,'#4b4d45');floor.addColorStop(.45,'#30322d');floor.addColorStop(1,'#11130f');
+ floor.addColorStop(0,'#55574f');floor.addColorStop(1,'#181a16');
  ctx.fillStyle=floor;ctx.fillRect(0,horizon,W,H-horizon);
 
- const rays=Math.max(400,Math.floor(W));
- const colW=W/rays;
- for(let i=0;i<rays;i++){
-   const cam=(i/(rays-1)-.5)*fov;
-   const ang=player.a+cam;
-   const wall=wallDist(ang);
-   const obj=objectsHit(ang);
-   const hitObj=obj<wall;
-   const raw=hitObj?obj:wall;
-   const d=Math.max(.2,raw*Math.cos(cam));
-   const height=Math.min(H*2.5,7*proj/d);
-   const top=horizon-height/2;
-   const bottom=Math.min(H,horizon+height/2);
+ // Perspective floor tiles make the room orientation obvious.
+ for(let z=-10;z<=10;z+=2){
+   quad([[-14,z,0],[14,z,0],[14,z+.035,0],[-14,z+.035,0]],'rgba(190,190,175,.10)');
+ }
+ for(let x=-14;x<=14;x+=2){
+   quad([[x,-10,0],[x+.035,-10,0],[x+.035,10,0],[x,10,0]],'rgba(190,190,175,.08)');
+ }
 
-   if(hitObj){
-     const shade=Math.max(45,120-d*3);
-     ctx.fillStyle='rgb('+Math.floor(shade*.72)+','+Math.floor(shade*.60)+','+Math.floor(shade*.45)+')';
-   }else{
-     // Alternating concrete panels make the wall unmistakable.
-     const shade=Math.max(50,Math.min(155,145-d*2.5));
-     const panel=(Math.floor(i/55)%2);
-     ctx.fillStyle=panel?'rgb('+shade+','+(shade+6)+','+(shade-10)+')':'rgb('+(shade-18)+','+(shade-14)+','+(shade-20)+')';
-   }
-   ctx.fillRect(i*colW,top,colW+1,height);
-   
-   if(!hitObj && i%55===0){
-     ctx.fillStyle='rgba(0,0,0,.5)';
-     ctx.fillRect(i*colW,top,3,height);
-   }
+ // Four actual room walls, with visible top edges.
+ const wallDefs=[
+  [[-15,-11],[15,-11],'#55594f'],
+  [[15,-11],[15,11],'#464a43'],
+  [[15,11],[-15,11],'#3f433c'],
+  [[-15,11],[-15,-11],'#4b4f47']
+ ];
+ for(const w of wallDefs){
+   quad([[w[0][0],w[0][1],0],[w[1][0],w[1][1],0],[w[1][0],w[1][1],7],[w[0][0],w[0][1],7]],w[2],'#181a17');
  }
- 
- // Clear architectural horizon line
- ctx.fillStyle='#090a09';ctx.fillRect(0,horizon-3,W,6);
- drawObjects(horizon,fov,proj);
- 
- // Large, perspective-independent windows: intentionally obvious while debugging.
- ctx.fillStyle='rgba(100,120,105,.8)';
- ctx.fillRect(W*.18,H*.14,W*.20,H*.22);
- ctx.fillRect(W*.62,H*.14,W*.20,H*.22);
- ctx.strokeStyle='#c1c8b9';ctx.lineWidth=4;
- ctx.strokeRect(W*.18,H*.14,W*.20,H*.22);
- ctx.strokeRect(W*.62,H*.14,W*.20,H*.22);
- 
- // Ceiling lamp
- ctx.fillStyle='#d5d8bd';ctx.fillRect(W*.46,H*.06,W*.08,8);
- 
- // Crosshair and vignette
+
+ // Door on the far wall
+ quad([[8.3,-10.95,0],[11.7,-10.95,0],[11.7,-10.95,6.2],[8.3,-10.95,6.2]],'#242721','#0b0c0b');
+ quad([[8.55,-11.02,.25],[11.45,-11.02,.25],[11.45,-11.02,5.9],[8.55,-11.02,5.9]],'#11130f','#777c70');
+
+ // Windows: obvious illuminated openings.
+ quad([[-7.5,-11.03,2.0],[-3.0,-11.03,2.0],[-3.0,-11.03,5.2],[-7.5,-11.03,5.2]],'#687866','#b3bea9');
+ quad([[1.5,-11.03,2.0],[5.5,-11.03,2.0],[5.5,-11.03,5.2],[1.5,-11.03,5.2]],'#687866','#b3bea9');
+
+ // Objects as solid boxes, far to near.
+ const visible=objects.map(o=>({...o,dist:Math.hypot(o.x-player.x,o.z-player.z)})).sort((a,b)=>b.dist-a.dist);
+ for(const o of visible){
+   const x1=o.x-o.w/2,x2=o.x+o.w/2,z1=o.z-o.d/2,z2=o.z+o.d/2;
+   quad([[x1,z1,0],[x2,z1,0],[x2,z1,o.h],[x1,z1,o.h]],o.c,'#10110f');
+   quad([[x2,z1,0],[x2,z2,0],[x2,z2,o.h],[x2,z1,o.h]],o.c,'#10110f');
+   quad([[x1,z2,0],[x2,z2,0],[x2,z2,o.h],[x1,z2,o.h]],o.c,'#10110f');
+   quad([[x1,z1,o.h],[x2,z1,o.h],[x2,z2,o.h],[x1,z2,o.h]],o.c,'#10110f');
+ }
+
+ // Ceiling beams
+ for(let x=-12;x<=12;x+=6){
+   quad([[x,-10.7,6.8],[x+.28,-10.7,6.8],[x+.28,10.7,6.8],[x,10.7,6.8]],'#292c27','#11120f');
+ }
+ // Hanging light
+ const lamp=project(0,-1.5,6.7);
+ if(lamp){
+   ctx.fillStyle='#d9ddbd';ctx.beginPath();ctx.arc(lamp.x,lamp.y,Math.max(5,Math.min(14,70/lamp.z)),0,Math.PI*2);ctx.fill();
+ }
+
+ // Vignette
  const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.max(W,H)*.8);
- g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.32)');
+ g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.28)');
  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-}
-function objectsHit(ang){
- let best=1000;
- for(const o of objects){
-   const d=rayBox(o,ang);
-   if(d<best)best=d;
- }
- return best;
-}
-function drawObjects(horizon,fov,proj){
- const list=objects.map(o=>{
-   const dx=o.x-player.x,dz=o.z-player.z;
-   const d=Math.hypot(dx,dz);
-   const a=rayAngle(Math.atan2(dx,-dz)-player.a);
-   return {...o,d,a};
- }).filter(o=>Math.abs(o.a)<fov*.7&&o.d>.3).sort((a,b)=>b.d-a.d);
- for(const o of list){
-   const depth=Math.max(.3,o.d*Math.cos(o.a));
-   const hh=Math.min(H*2,o.h*proj/depth);
-   const ww=Math.max(14,Math.min(W*.5,o.w*proj/depth));
-   const sx=W/2+(o.a/fov)*W;
-   const yy=horizon-hh*.72;
-   ctx.fillStyle=o.c;ctx.fillRect(sx-ww/2,yy,ww,hh);
-   ctx.strokeStyle='#050505';ctx.lineWidth=4;ctx.strokeRect(sx-ww/2,yy,ww,hh);
- }
 }
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;move(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
