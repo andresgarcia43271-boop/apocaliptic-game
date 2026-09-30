@@ -31,7 +31,6 @@
 </div>
 <script type="module">
 import * as THREE from 'https://esm.sh/three@0.180.0';
-import { PointerLockControls } from 'https://esm.sh/three@0.180.0/examples/jsm/controls/PointerLockControls.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x090b09);
@@ -50,11 +49,35 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = .72;
 document.querySelector('#game').appendChild(renderer.domElement);
 
-const controls = new PointerLockControls(camera, document.body);
+// Controles FPS propios: evita incompatibilidades de PointerLockControls/CDN.
+const controls = {
+  isLocked: false,
+  yaw: 0,
+  pitch: 0,
+  lock(){
+    document.body.requestPointerLock();
+  }
+};
+
 const start = document.querySelector('#start');
-start.addEventListener('click',()=>controls.lock());
-controls.addEventListener('lock',()=>start.classList.add('hidden'));
-controls.addEventListener('unlock',()=>start.classList.remove('hidden'));
+
+start.addEventListener('click',()=>{
+  document.body.requestPointerLock();
+});
+
+document.addEventListener('pointerlockchange',()=>{
+  controls.isLocked = document.pointerLockElement === document.body;
+  start.classList.toggle('hidden', controls.isLocked);
+});
+
+document.addEventListener('mousemove',e=>{
+  if(!controls.isLocked) return;
+  const sensitivity = 0.0022;
+  controls.yaw -= e.movementX * sensitivity;
+  controls.pitch -= e.movementY * sensitivity;
+  controls.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, controls.pitch));
+  camera.rotation.set(controls.pitch, controls.yaw, 0, 'YXZ');
+});
 
 const clock = new THREE.Clock();
 const keys = Object.create(null);
@@ -215,12 +238,9 @@ function move(dt){
   const amountS=strafe/len*speed*dt;
 
   // Movimiento manual para evitar problemas de compatibilidad con moveForward/moveRight.
-  const direction=new THREE.Vector3();
-  camera.getWorldDirection(direction);
-  direction.y=0;
-  direction.normalize();
-
-  const right=new THREE.Vector3().crossVectors(direction,camera.up).normalize();
+  // Dirección horizontal basada únicamente en el yaw del jugador.
+  const direction=new THREE.Vector3(-Math.sin(controls.yaw),0,-Math.cos(controls.yaw));
+  const right=new THREE.Vector3(Math.cos(controls.yaw),0,-Math.sin(controls.yaw));
   const delta=new THREE.Vector3()
     .addScaledVector(direction,amountF)
     .addScaledVector(right,amountS);
