@@ -3,213 +3,260 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zona 04 — Apocalyptic Room v20</title>
+<title>Zona 04 — Apocalyptic Room v21</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080907;color:#ddd;font-family:system-ui,sans-serif}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#10130f}
 #start{position:fixed;inset:0;display:grid;place-items:center;background:rgba(3,4,3,.92);cursor:pointer;z-index:5}
-#panel{width:min(520px,90vw);padding:30px;border:1px solid #5b6254;background:#0b0d0b;box-shadow:0 20px 80px #000}
+#panel{width:min(560px,90vw);padding:30px;border:1px solid #5b6254;background:#0b0d0b;box-shadow:0 20px 80px #000}
 h1{margin:0 0 8px;letter-spacing:.08em}p{color:#aeb3a4}.btn{display:inline-block;margin-top:12px;padding:11px 16px;border:1px solid #a7ad99;letter-spacing:.08em}
 #hud{position:fixed;inset:0;pointer-events:none;z-index:2}.cross{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2px;border-radius:50%;background:#eee;box-shadow:0 0 7px #fff}
-#info{position:absolute;left:20px;bottom:20px;padding:12px 15px;background:rgba(5,7,5,.7);border:1px solid #555;font-size:13px}
+#info{position:absolute;left:20px;bottom:20px;padding:12px 15px;background:rgba(5,7,5,.75);border:1px solid #555;font-size:13px;white-space:pre-line}
+#toast{position:absolute;left:50%;top:15%;transform:translateX(-50%);padding:10px 20px;background:rgba(20,10,5,.8);border:1px solid #a85;font-size:18px;color:#ffc;opacity:0;transition:opacity .3s}
 .hidden{display:none!important}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="hud"><div class="cross"></div><div id="info">WASD mover · SHIFT correr · flechas girar · clic para capturar el mouse</div></div>
-<div id="start" class="hidden"></div>
+<div id="hud"><div class="cross"></div><div id="info"></div><div id="toast"></div></div>
+<div id="start"><div id="panel"><h1>ZONA 04</h1><p>Sobrevive a las hordas de zombies (cada minuto son más). WASD mover · SHIFT correr · ← → girar · mouse mirar · clic disparar · 1-5 armas · R recargar · E mejorar · B comprar siguiente arma (cada una cuesta más).</p><span class="btn">CLIC PARA ENTRAR</span></div></div>
 <script>
 'use strict';
-const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),start=document.getElementById('start');
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),start=document.getElementById('start'),info=document.getElementById('info'),toastEl=document.getElementById('toast');
 let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,2);
 function resize(){W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 
-const player={x:0,z:8.2,a:0,pitch:0,active:true};
-const keys={};
-const walls=[
-{x1:-15,z1:-11,x2:15,z2:-11},{x1:15,z1:-11,x2:15,z2:11},
-{x1:15,z1:11,x2:-15,z2:11},{x1:-15,z1:11,x2:-15,z2:-11},
-{x1:8.45,z1:10.48,x2:8.45,z2:11},{x1:11.55,z1:11,x2:11.55,z2:10.48}
-];
-const objects=[
-{x:-9,z:-6.8,w:4.8,d:1.0,h:3.8,c:'#30332f',name:'estantería'},
-{x:7,z:-5.5,w:6,d:1.7,h:1.4,c:'#493a2d',name:'mesa de trabajo'},
-{x:-1,z:-3.5,w:3.5,d:1.8,h:1.5,c:'#3f3429',name:'mesa'},
-{x:3.3,z:-1.8,w:1.3,d:1.1,h:1.0,c:'#34362f',name:'silla caída'},
-{x:-11,z:3,w:1.2,d:1.0,h:.8,c:'#57372a',name:'caja'},
-{x:-9.6,z:4,w:1.0,d:1.0,h:.7,c:'#3b3329',name:'caja'},
-{x:5,z:2,w:1.0,d:1.0,h:.7,c:'#4b3a2d',name:'escombro'},
-{x:8,z:4,w:1.3,d:1.1,h:.9,c:'#3b3028',name:'escombro'}
-];
+// ---- textured noise pattern (grano para "texturas") ----
+const tex=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');const img=g.createImageData(64,64);for(let i=0;i<img.data.length;i+=4){const v=100+Math.random()*120|0;img.data[i]=v;img.data[i+1]=v;img.data[i+2]=v*.92|0;img.data[i+3]=255}g.putImageData(img,0,0);return ctx.createPattern(c,'repeat')})();
 
+const EYE=1.6;                 // altura de ojos -> tamaño de persona normal
+const ROOM={x:34,z:24,h:8};    // sala más grande: 68 x 48 m
+const player={x:0,z:18,a:0,pitch:0,active:false,startT:0};
+const keys={};
+const objects=[
+ {x:-9,z:-6.8,w:4.8,d:1.0,h:3.8,c:'#4a463e',name:'estantería'},
+ {x:7,z:-5.5,w:6,d:1.7,h:1.4,c:'#6b543a',name:'mesa de trabajo'},
+ {x:-1,z:-3.5,w:3.5,d:1.8,h:1.5,c:'#5a4a36',name:'mesa'},
+ {x:3.3,z:-1.8,w:1.3,d:1.1,h:1.0,c:'#4d5148',name:'silla caída'},
+ {x:-11,z:3,w:1.2,d:1.0,h:.8,c:'#7a4a33',name:'caja'},
+ {x:-9.6,z:4,w:1.0,d:1.0,h:.7,c:'#54453a',name:'caja'},
+ {x:5,z:2,w:1.0,d:1.0,h:.7,c:'#6b543a',name:'escombro'},
+ {x:8,z:4,w:1.3,d:1.1,h:.9,c:'#54453a',name:'escombro'},
+ {x:15.5,z:-9,w:2.2,d:2.2,h:2.0,c:'#5d5a4d',name:'barril apilado'},
+ {x:-17,z:-4,w:3,d:2,h:2.2,c:'#4f4a40',name:'rack'},
+ {x:16,z:8,w:2,d:2,h:1.6,c:'#6b543a',name:'armario'},
+ {x:-15,z:9,w:3.5,d:1.6,h:1.2,c:'#5a4a36',name:'sofá roto'},
+ {x:26,z:12,w:2.4,d:2.4,h:1.8,c:'#7a4a33',name:'cajas'},
+ {x:-26,z:-14,w:4,d:2,h:2.4,c:'#4f4a40',name:'grúa'},
+ {x:24,z:-16,w:2,d:2,h:1.5,c:'#5d5a4d',name:'barril'},
+ {x:-6,z:14,w:5,d:2,h:1.5,c:'#54453a',name:'mostrador'}
+];
+const zombies=[];
+let wave=0,waveT=0,coins=0,kills=0;
+let dmgLv=1,dmgCost=25,dmg=10;
+const weapons=[
+ {name:'PISTOLA',price:0,owned:true,mag:12,ammo:12,reload:1.4,cone:.16,targets:1,rate:.2,mult:1},
+ {name:'ESCOPETA',price:40,owned:false,mag:6,ammo:6,reload:2.0,cone:.34,targets:6,rate:.55,mult:.7},
+ {name:'AMETRALLADORA',price:150,owned:false,mag:40,ammo:40,reload:2.2,cone:.10,targets:1,rate:.08,mult:.45},
+ {name:'FRANCOTIRADOR',price:300,owned:false,mag:5,ammo:5,reload:2.4,cone:.04,targets:3,rate:.7,mult:4},
+ {name:'LANZACOHETES',price:600,owned:false,mag:3,ammo:3,reload:3.5,cone:.2,targets:8,rate:1.1,mult:8}
+];
+let wi=0,reloadT=0,fireT=0,flashT=0,toastT=0,lastShot=0;
+// texturas por objeto (patrones distintos)
+function shade(hex,f){const n=parseInt(hex.slice(1),16);let r=n>>16&255,g=n>>8&255,b=n&255;r=Math.min(255,r*f)|0;g=Math.min(255,g*f)|0;b=Math.min(255,b*f)|0;return 'rgb('+r+','+g+','+b+')'}
+function makeObjPat(base,f){const c=document.createElement('canvas');c.width=c.height=32;const g=c.getContext('2d');g.fillStyle=shade(base,f);g.fillRect(0,0,32,32);g.fillStyle='rgba(0,0,0,.18)';for(let y=0;y<32;y+=8)g.fillRect(0,y,32,1);g.fillStyle='rgba(255,255,255,.07)';for(let x=0;x<32;x+=16)g.fillRect(x,0,1,32);return ctx.createPattern(c,'repeat')}
+for(const o of objects){o.texs=[makeObjPat(o.c,1),makeObjPat(o.c,.8),makeObjPat(o.c,.6),makeObjPat(o.c,1.25)]}
+
+function toast(t){toastEl.textContent=t;toastEl.style.opacity=1;toastT=2.5}
 function collide(x,z){
  const r=.38;
- if(x<-14.5||x>14.5||z<-10.5||z>10.5)return true;
+ if(x<-ROOM.x+.5||x>ROOM.x-.5||z<-ROOM.z+.5||z>ROOM.z-.5)return true;
  for(const o of objects)if(Math.abs(x-o.x)<o.w/2+r&&Math.abs(z-o.z)<o.d/2+r)return true;
  return false;
 }
-function startGame(){player.active=true;start.classList.add('hidden');canvas.focus();try{canvas.requestPointerLock()}catch(e){}}
-start.addEventListener('click',startGame); canvas.addEventListener('click',()=>{if(player.active){try{canvas.requestPointerLock()}catch(e){}}});
+function startGame(){player.active=true;player.startT=performance.now();start.classList.add('hidden');canvas.focus();try{canvas.requestPointerLock()}catch(e){}}
+start.addEventListener('click',startGame);
+canvas.addEventListener('click',()=>{if(player.active){fire();try{canvas.requestPointerLock()}catch(e){}}});
 document.addEventListener('pointerlockchange',()=>{});
-addEventListener('keydown',e=>{keys[e.code]=true;if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(!player.active&&(e.code==='Enter'||e.code==='Space'))startGame()});
+addEventListener('keydown',e=>{
+ keys[e.code]=true;
+ if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
+ if(!player.active&&(e.code==='Enter'||e.code==='Space'))startGame();
+ if(player.active&&e.code==='Digit1'&&weapons[0].owned)wi=0;
+ if(player.active&&e.code==='Digit2'&&weapons[1].owned)wi=1;
+ if(player.active&&e.code==='Digit3'&&weapons[2].owned)wi=2;
+ if(player.active&&e.code==='Digit4'&&weapons[3].owned)wi=3;
+ if(player.active&&e.code==='Digit5'&&weapons[4].owned)wi=4;
+ if(player.active&&e.code==='KeyR')tryReload();
+ if(player.active&&e.code==='KeyE')tryUpgrade();
+ if(player.active&&e.code==='KeyB')tryBuy();
+ if(player.active&&e.code==='KeyJ')fire();
+});
 addEventListener('keyup',e=>{keys[e.code]=false});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
 addEventListener('mousemove',e=>{if(!player.active)return;if(document.pointerLockElement===canvas){player.a-=e.movementX*.0025;player.pitch=Math.max(-.5,Math.min(.5,player.pitch-e.movementY*.0018))}});
 
+function tryReload(){const w=weapons[wi];if(reloadT<=0&&w.ammo<w.mag){reloadT=w.reload;toast('Recargando…')}}
+function tryUpgrade(){if(coins>=dmgCost){coins-=dmgCost;dmg+=5;dmgLv++;dmgCost=Math.round(dmgCost*1.6);toast('¡Mejora! Daño base '+dmg)}else toast('Te faltan monedas ('+dmgCost+')')}
+function tryBuy(){const w=weapons.find(w=>!w.owned);if(!w){toast('Ya tienes todas las armas');return}if(coins>=w.price){coins-=w.price;w.owned=true;w.ammo=w.mag;wi=weapons.indexOf(w);toast('¡Compraste '+w.name+'!')}else toast('Necesitas '+w.price+' monedas para '+w.name)}
+function fire(){
+ if(!player.active||reloadT>0||fireT>0)return;
+ const w=weapons[wi];
+ if(w.ammo<=0){tryReload();return}
+ w.ammo--;fireT=w.rate;flashT=.08;lastShot=performance.now();
+ const fx=-Math.sin(player.a),fz=-Math.cos(player.a);
+ const targets=zombies.filter(z=>{
+   const dx=z.x-player.x,dz=z.z-player.z,d=Math.hypot(dx,dz);
+   if(d>40)return false;
+   const cos=Math.max(-1,Math.min(1,(fx*dx+fz*dz)/d));
+   return Math.acos(cos)<w.cone;
+ }).sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z)).slice(0,w.targets);
+ for(const z of targets){z.hp-=Math.round(dmg*w.mult);z.hitT=.15}
+}
+addEventListener('mousedown',()=>{if(player.active)fire()});
+
+function spawnWave(){
+ wave++;const n=4+wave*3;
+ for(let i=0;i<n;i++){
+  let x,z,tries=0;
+  do{x=(Math.random()*2-1)*(ROOM.x-2);z=(Math.random()*2-1)*(ROOM.z-2);tries++}while(Math.hypot(x-player.x,z-player.z)<6&&tries<20);
+  zombies.push({x,z,hp:30+wave*6,maxHp:30+wave*6,speed:1.0+Math.min(1.2,wave*.08),w:.9,d:.9,h:1.7,hitT:0});
+ }
+ toast('¡Horda '+wave+'! ('+n+' zombies)');
+}
+
 function move(dt){
  if(!player.active)return;
+ if(keys.ArrowLeft)player.a+=1.8*dt;
+ if(keys.ArrowRight)player.a-=1.8*dt;
  const speed=(keys.ShiftLeft||keys.ShiftRight)?6:3.5;
- let f=Number(keys.KeyW||keys.ArrowUp)-Number(keys.KeyS||keys.ArrowDown);
- let s=Number(keys.KeyD||keys.ArrowRight)-Number(keys.KeyA||keys.ArrowLeft);
+ let f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0);
+ let s=(keys.KeyD?1:0)-(keys.KeyA?1:0);
  const n=Math.hypot(f,s)||1;f/=n;s/=n;
  const nx=player.x+(-Math.sin(player.a)*f+Math.cos(player.a)*s)*speed*dt;
  const nz=player.z+(-Math.cos(player.a)*f-Math.sin(player.a)*s)*speed*dt;
  if(!collide(nx,player.z))player.x=nx;if(!collide(player.x,nz))player.z=nz;
-}
-function rayAngle(a){while(a<-Math.PI)a+=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;return a}
-function wallDist(ang){
- const dx=Math.sin(ang), dz=-Math.cos(ang);
- let best=1000;
- if(Math.abs(dx)>1e-6){const tx=dx>0?(15-player.x)/dx:(-15-player.x)/dx;if(tx>0)best=Math.min(best,tx)}
- if(Math.abs(dz)>1e-6){const tz=dz>0?(11-player.z)/dz:(-11-player.z)/dz;if(tz>0)best=Math.min(best,tz)}
- return best;
-}
-function rayBox(o,ang){
- const dx=Math.sin(ang),dz=-Math.cos(ang);
- const minX=o.x-o.w/2,maxX=o.x+o.w/2,minZ=o.z-o.d/2,maxZ=o.z+o.d/2;
- let tx1=-Infinity,tx2=Infinity,tz1=-Infinity,tz2=Infinity;
- if(Math.abs(dx)<1e-8){if(player.x<minX||player.x>maxX)return 1000}else{tx1=(minX-player.x)/dx;tx2=(maxX-player.x)/dx}
- if(Math.abs(dz)<1e-8){if(player.z<minZ||player.z>maxZ)return 1000}else{tz1=(minZ-player.z)/dz;tz2=(maxZ-player.z)/dz}
- const near=Math.max(Math.min(tx1,tx2),Math.min(tz1,tz2));
- const far=Math.min(Math.max(tx1,tx2),Math.max(tz1,tz2));
- if(far<0||near>far)return 1000;
- return near>0?near:far;
+ // zombies persiguen
+ for(const z of zombies){
+  const dx=player.x-z.x,dz=player.z-z.z,d=Math.hypot(dx,dz)||1;
+  if(d>.7){const s=z.speed*dt;z.x+=dx/d*s;z.z+=dz/d*s}
+  if(z.hitT>0)z.hitT-=dt;
+ }
+ for(let i=zombies.length-1;i>=0;i--)if(zombies[i].hp<=0){coins+=5;kills++;toast('+5 monedas');zombies.splice(i,1)}
+ // oleadas cada 60s
+ waveT+=dt;if(waveT>=60){waveT=0;spawnWave()}
+ if(fireT>0)fireT-=dt;if(flashT>0)flashT-=dt;if(reloadT>0){reloadT-=dt;if(reloadT<=0)weapons[wi].ammo=weapons[wi].mag}
+ if(toastT>0){toastT-=dt;if(toastT<=0)toastEl.style.opacity=0}
 }
 function cameraPoint(x,z,y=0){
  const dx=x-player.x,dz=z-player.z;
  const ca=Math.cos(player.a),sa=Math.sin(player.a);
- return {sx:dx*ca-dz*sa,depth:-dx*sa-dz*ca,y};
+ return {sx:dx*ca-dz*sa,depth:-dx*sa-dz*ca,y:y-EYE};
 }
 function projectCamera(p){
  const focal=(H/2)/Math.tan(Math.PI/6);
  const horizon=H/2+player.pitch*H*.4;
  return {x:W/2+(p.sx/p.depth)*focal,y:horizon-(p.y/p.depth)*focal};
 }
+function project(x,z,y=0){
+ const p=cameraPoint(x,z,y);
+ if(p.depth<=.08)return {x:0,y:0,z:p.depth};
+ const pr=projectCamera(p);
+ return {x:pr.x,y:pr.y,z:p.depth};
+}
 function quad(points,fill,stroke){
- // Clip the 3D polygon against the camera plane BEFORE perspective division.
- // v19/v18 used Math.max(depth,.08), which projected points behind the camera
- // onto the near plane and produced enormous/self-intersecting wall polygons.
  let poly=points.map(v=>cameraPoint(v[0],v[1],v[2]));
  const near=.12;
  const clipped=[];
  for(let i=0;i<poly.length;i++){
-   const A=poly[i],B=poly[(i+1)%poly.length];
-   const Ain=A.depth>near,Bin=B.depth>near;
-   if(Ain)clipped.push(A);
-   if(Ain!==Bin){
-     const t=(near-A.depth)/(B.depth-A.depth);
-     clipped.push({
-       sx:A.sx+(B.sx-A.sx)*t,
-       depth:near,
-       y:A.y+(B.y-A.y)*t
-     });
-   }
+  const A=poly[i],B=poly[(i+1)%poly.length];
+  const Ain=A.depth>near,Bin=B.depth>near;
+  if(Ain)clipped.push(A);
+  if(Ain!==Bin){const t=(near-A.depth)/(B.depth-A.depth);clipped.push({sx:A.sx+(B.sx-A.sx)*t,depth:near,y:A.y+(B.y-A.y)*t})}
  }
  if(clipped.length<3)return;
  ctx.beginPath();
- const p0=projectCamera(clipped[0]);
- ctx.moveTo(p0.x,p0.y);
- for(let i=1;i<clipped.length;i++){
-   const p=projectCamera(clipped[i]);
-   ctx.lineTo(p.x,p.y);
- }
+ const p0=projectCamera(clipped[0]);ctx.moveTo(p0.x,p0.y);
+ for(let i=1;i<clipped.length;i++){const p=projectCamera(clipped[i]);ctx.lineTo(p.x,p.y)}
  ctx.closePath();
  ctx.fillStyle=fill;ctx.fill();
- if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
+ ctx.save();ctx.globalAlpha=.14;ctx.fillStyle=tex;ctx.fill();ctx.restore();
+ if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke()}
 }
 function render(){
  ctx.clearRect(0,0,W,H);
  const horizon=H/2+player.pitch*H*.4;
-
- // Ceiling and floor background
- ctx.fillStyle='#0b0d0b';ctx.fillRect(0,0,W,horizon);
+ // techo con gradiente (iluminación más cálida)
+ const ceil=ctx.createLinearGradient(0,0,0,horizon);
+ ceil.addColorStop(0,'#1c2019');ceil.addColorStop(1,'#2c3128');
+ ctx.fillStyle=ceil;ctx.fillRect(0,0,W,horizon);
+ // piso
  const floor=ctx.createLinearGradient(0,horizon,0,H);
- floor.addColorStop(0,'#55574f');floor.addColorStop(1,'#181a16');
+ floor.addColorStop(0,'#6b6d62');floor.addColorStop(1,'#232520');
  ctx.fillStyle=floor;ctx.fillRect(0,horizon,W,H-horizon);
+ // charco de luz alrededor del jugador
+ const lp=ctx.createRadialGradient(W/2,horizon+(H-horizon)*.35,10,W/2,horizon+(H-horizon)*.35,Math.max(W,H)*.55);
+ lp.addColorStop(0,'rgba(230,220,160,.18)');lp.addColorStop(1,'rgba(0,0,0,0)');
+ ctx.fillStyle=lp;ctx.fillRect(0,horizon,W,H-horizon);
 
- // Perspective floor tiles make the room orientation obvious.
- for(let z=-10;z<=10;z+=2){
-   quad([[-14,z,0],[14,z,0],[14,z+.035,0],[-14,z+.035,0]],'rgba(190,190,175,.10)');
- }
- for(let x=-14;x<=14;x+=2){
-   quad([[x,-10,0],[x+.035,-10,0],[x+.035,10,0],[x,10,0]],'rgba(190,190,175,.08)');
- }
+ for(let z=-ROOM.z+1;z<=ROOM.z-1;z+=2)quad([[-ROOM.x+1,z,0],[ROOM.x-1,z,0],[ROOM.x-1,z+.035,0],[-ROOM.x+1,z+.035,0]],'rgba(190,190,175,.10)');
+ for(let x=-ROOM.x+1;x<=ROOM.x-1;x+=2)quad([[x,-ROOM.z+1,0],[x+.035,-ROOM.z+1,0],[x+.035,ROOM.z-1,0],[x,ROOM.z-1,0]],'rgba(190,190,175,.08)');
 
- // Four actual room walls, with visible top edges.
- const wallDefs=[
-  [[-15,-11],[15,-11],'#55594f'],
-  [[15,-11],[15,11],'#464a43'],
-  [[15,11],[-15,11],'#3f433c'],
-  [[-15,11],[-15,-11],'#4b4f47']
- ];
- for(const w of wallDefs){
-   quad([[w[0][0],w[0][1],0],[w[1][0],w[1][1],0],[w[1][0],w[1][1],7],[w[0][0],w[0][1],7]],w[2],'#181a17');
- }
+ const X=ROOM.x,Z=ROOM.z;
+ const wallDefs=[[[-X,-Z],[X,-Z],'#5a5e52'],[[X,-Z],[X,Z],'#494d45'],[[X,Z],[-X,Z],'#42463e'],[[-X,Z],[-X,-Z],'#4e5249']];
+ for(const w of wallDefs)quad([[w[0][0],w[0][1],0],[w[1][0],w[1][1],0],[w[1][0],w[1][1],ROOM.h],[w[0][0],w[0][1],ROOM.h]],w[2],'#181a17');
 
- // Door on the far wall
- quad([[8.3,-10.95,0],[11.7,-10.95,0],[11.7,-10.95,6.2],[8.3,-10.95,6.2]],'#242721','#0b0c0b');
- quad([[8.55,-11.02,.25],[11.45,-11.02,.25],[11.45,-11.02,5.9],[8.55,-11.02,5.9]],'#11130f','#777c70');
+ // puerta
+ quad([[8.3,-Z+.05,0],[11.7,-Z+.05,0],[11.7,-Z+.05,6.2],[8.3,-Z+.05,6.2]],'#2a2d24','#0b0c0b');
+ quad([[8.55,-Z+.12,.25],[11.45,-Z+.12,.25],[11.45,-Z+.12,5.9],[8.55,-Z+.12,5.9]],'#15170f','#7f846e');
+ // ventanas
+ quad([[-7.5,-Z-.03,2.0],[-3.0,-Z-.03,2.0],[-3.0,-Z-.03,5.2],[-7.5,-Z-.03,5.2]],'#7d8a72','#c9d4b8');
+ quad([[1.5,-Z-.03,2.0],[5.5,-Z-.03,2.0],[5.5,-Z-.03,5.2],[1.5,-Z-.03,5.2]],'#7d8a72','#c9d4b8');
 
- // Windows: obvious illuminated openings.
- quad([[-7.5,-11.03,2.0],[-3.0,-11.03,2.0],[-3.0,-11.03,5.2],[-7.5,-11.03,5.2]],'#687866','#b3bea9');
- quad([[1.5,-11.03,2.0],[5.5,-11.03,2.0],[5.5,-11.03,5.2],[1.5,-11.03,5.2]],'#687866','#b3bea9');
-
- // Objects: explicit 3D boxes. The previous version could discard faces when one corner crossed the camera plane.
- const visible=objects.map(o=>({...o,dist:Math.hypot(o.x-player.x,o.z-player.z)}))
-   .filter(o=>o.dist<32).sort((a,b)=>b.dist-a.dist);
+ const visible=objects.map(o=>({...o,dist:Math.hypot(o.x-player.x,o.z-player.z)})).filter(o=>o.dist<46).sort((a,b)=>b.dist-a.dist);
  for(const o of visible){
-   const x1=o.x-o.w/2,x2=o.x+o.w/2,z1=o.z-o.d/2,z2=o.z+o.d/2;
-   const P=[
-     [x1,z1,0],[x2,z1,0],[x2,z2,0],[x1,z2,0],
-     [x1,z1,o.h],[x2,z1,o.h],[x2,z2,o.h],[x1,z2,o.h]
-   ];
-   const faces=[
-     [0,1,5,4,o.c],[1,2,6,5,'#665a49'],
-     [2,3,7,6,'#40362c'],[4,5,6,7,'#88785f']
-   ];
-   for(const face of faces) quad(face.slice(0,4).map(i=>P[i]),face[4],'#11120f');
-   const center=project(o.x,o.z,o.h);
-   if(center && center.z>.08){
-     ctx.fillStyle='#ddd0a5';ctx.font='bold 12px system-ui';ctx.textAlign='center';
-     ctx.fillText(o.name.toUpperCase(),center.x,center.y-8);
-   }
- }
- 
- // A deliberately simple reference object, independent of the room walls.
- const tcx=project(0,3,0), ttop=project(0,3,2.5);
- if(tcx.z>.08 && ttop.z>.08){
-   const left=project(-1.5,3,0),right=project(1.5,3,0);
-   const ltop=project(-1.5,3,2.5),rtop=project(1.5,3,2.5);
-   ctx.beginPath();ctx.moveTo(left.x,left.y);ctx.lineTo(right.x,right.y);ctx.lineTo(rtop.x,rtop.y);ctx.lineTo(ltop.x,ltop.y);ctx.closePath();
-   ctx.fillStyle='#80603c';ctx.fill();ctx.strokeStyle='#f0cf8a';ctx.lineWidth=4;ctx.stroke();
-   ctx.fillStyle='#f0cf8a';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('OBJETO TEST',ttop.x,ttop.y-12);
- }
- 
- // Ceiling beams
- for(let x=-12;x<=12;x+=6){
-   quad([[x,-10.7,6.8],[x+.28,-10.7,6.8],[x+.28,10.7,6.8],[x,10.7,6.8]],'#292c27','#11120f');
- }
- // Hanging light
- const lamp=project(0,-1.5,6.7);
- if(lamp){
-   ctx.fillStyle='#d9ddbd';ctx.beginPath();ctx.arc(lamp.x,lamp.y,Math.max(5,Math.min(14,70/lamp.z)),0,Math.PI*2);ctx.fill();
+  const x1=o.x-o.w/2,x2=o.x+o.w/2,z1=o.z-o.d/2,z2=o.z+o.d/2;
+  const P=[[x1,z1,0],[x2,z1,0],[x2,z2,0],[x1,z2,0],[x1,z1,o.h],[x2,z1,o.h],[x2,z2,o.h],[x1,z2,o.h]];
+  const faces=[[0,1,5,4,o.texs[0]],[1,2,6,5,o.texs[1]],[2,3,7,6,o.texs[2]],[4,5,6,7,o.texs[3]]];
+  for(const face of faces)quad(face.slice(0,4).map(i=>P[i]),face[4],'#11120f');
+  const center=project(o.x,o.z,o.h);
+  if(center&&center.z>.08){ctx.fillStyle='#e8dcb0';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(o.name.toUpperCase(),center.x,center.y-8)}
  }
 
- // Vignette
+ // zombies (cajas verdes caminantes) + barra de vida
+ const zvis=zombies.map(z=>({...z,dist:Math.hypot(z.x-player.x,z.z-player.z)})).filter(z=>z.dist<50).sort((a,b)=>b.dist-a.dist);
+ for(const z of zvis){
+  const x1=z.x-z.w/2,x2=z.x+z.w/2,z1=z.z-z.d/2,z2=z.z+z.d/2;
+  const P=[[x1,z1,0],[x2,z1,0],[x2,z2,0],[x1,z2,0],[x1,z1,z.h],[x2,z1,z.h],[x2,z2,z.h],[x1,z2,z.h]];
+  const base=z.hitT>0?'#a05a4a':'#4f7a3a';
+  const faces=[[0,1,5,4,base],[1,2,6,5,'#5f8a48'],[2,3,7,6,'#3c5c2e'],[4,5,6,7,'#6fa055']];
+  for(const face of faces)quad(face.slice(0,4).map(i=>P[i]),face[4],'#0f120c');
+  const head=project(z.x,z.z,z.h+.25);
+  if(head&&head.z>.08){
+   const bw=Math.max(18,Math.min(46,340/head.z));
+   ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(head.x-bw/2,head.y,bw,5);
+   ctx.fillStyle=head.z<8?'#6fdc4f':'#4db83a';ctx.fillRect(head.x-bw/2,head.y,bw*Math.max(0,z.hp/z.maxHp),5);
+  }
+ }
+
+ // bigas del techo
+ for(let x=-ROOM.x+4;x<=ROOM.x-4;x+=6)quad([[x,-Z+.3,6.8],[x+.28,-Z+.3,6.8],[x+.28,Z-.3,6.8],[x,Z-.3,6.8]],'#33372f','#11120f');
+ // lámpara
+ const lamp=project(0,-1.5,6.7);
+ if(lamp&&lamp.z>.08){const r=Math.max(5,Math.min(14,70/lamp.z));ctx.fillStyle='#e6e8c8';ctx.beginPath();ctx.arc(lamp.x,lamp.y,r,0,Math.PI*2);ctx.fill();const gl=ctx.createRadialGradient(lamp.x,lamp.y,0,lamp.x,lamp.y,r*4);gl.addColorStop(0,'rgba(235,235,190,.25)');gl.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gl;ctx.fillRect(lamp.x-r*4,lamp.y-r*4,r*8,r*8)}
+
+ // flash de disparo
+ if(flashT>0){ctx.fillStyle='rgba(255,240,200,'+(flashT*4)+')';ctx.beginPath();ctx.arc(W/2,H/2,60,0,Math.PI*2);ctx.fill()}
+
+ // vignette
  const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.max(W,H)*.8);
- g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.28)');
+ g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.30)');
  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+
+ const w=weapons[wi];
+ const own=weapons.filter(x=>x.owned).map(x=>x.name).join(', ');
+ const next=weapons.find(x=>!x.owned);
+ info.textContent='Monedas: '+coins+'  ·  [E] Mejora daño '+dmgCost+'  ·  Daño '+dmg+'  ·  Oleada '+wave+'  ·  Zombies '+zombies.length+'\nArma: '+w.name+'  ·  '+w.ammo+'/'+w.mag+(reloadT>0?' (recargando)':'')+'  ·  Has matado: '+kills+'\n'+(next?'[B] Comprar '+next.name+': '+next.price+' (tienes: '+own+')':'Todas las armas desbloqueadas');
 }
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;move(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
